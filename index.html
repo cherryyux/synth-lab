@@ -193,7 +193,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .levels{display:flex;gap:8px;flex-wrap:wrap}
 .levels button{font-family:var(--f-ui);font-size:13px;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
 .levels button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
-.wb-grid{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:18px;align-items:start}
+.wb-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-items:start}
 @media (max-width:900px){.wb-grid{grid-template-columns:1fr}}
 .board-wrap{overflow-x:auto;background:var(--panel);border:1px solid var(--grid);border-radius:12px;padding:8px}
 .board-wrap svg{display:block;width:100%;min-width:720px;height:auto;touch-action:manipulation}
@@ -1400,8 +1400,9 @@ window.BENCH = (() => {
   const CHIPS = { "40106":{ n:14, label:"CD40106" }, "tl072":{ n:8, label:"TL072" }, "4017":{ n:16, label:"CD4017" } };
   const BOXES = {
     src:{ label:"Drone box", color:"#6b4a2e", terms:[["out","OUT"],["gnd","GND"]] },
-    amp:{ label:"LM386 amp", color:"#2e6b56", terms:[["in","IN"],["gnd","GND"]] },
-    voice:{ label:"Voice", color:"#3d4f7a", terms:[["cv","CV"],["gate","GATE"],["gnd","GND"]] }
+    amp:{ label:"LM386 amp", color:"#2e6b56", terms:[["vcc","VCC"],["gnd","GND"],["in","IN"],["sp","SPK+"],["sm","SPK−"]] },
+    spk:{ label:"Speaker", color:"#44424d", terms:[["p","+"],["n","−"]], speaker:true },
+    voice:{ label:"Voice", color:"#3d4f7a", terms:[["cv","CV"],["gate","GATE"],["out","OUT"],["gnd","GND"]] }
   };
   const f40106 = (R, C) => 1 / (0.8 * R * C);
   const m = (r, c) => `m-${r}-${c}`;
@@ -1409,9 +1410,12 @@ window.BENCH = (() => {
   /* ---- holes and nets ---- */
   let boxPos = {};
   function layoutBoxes(){
-    boxPos = {}; let y = 84;
-    (L.boxes || []).forEach(b => { const B = BOXES[b]; B.terms.forEach(([k], i) => { boxPos[`x-${b}-${k}`] = [744, y + 30 + i*30]; }); B.y = y; B.h = 22 + B.terms.length*30; y += B.h + 14; });
+    boxPos = {}; let y = 76;
+    (L.boxes || []).forEach(b => { const B = BOXES[b]; B.terms.forEach(([k], i) => { boxPos[`x-${b}-${k}`] = [744, y + 30 + i*24]; }); B.y = y; B.h = 20 + B.terms.length*24; y += B.h + 12; });
+    boardH = Math.max(410, y + 6);
+    Object.assign(boxPos, L.dual ? { "x-bat-pos":[18,78], "x-bat-neg":[38,78], "x-batb-pos":[18,232], "x-batb-neg":[38,232] } : { "x-bat-pos":[18,124], "x-bat-neg":[38,124] });
   }
+  let boardH = 410;
   function holeXY(h){
     if (boxPos[h]) return boxPos[h];
     const [k, a, b] = h.split("-");
@@ -1419,12 +1423,12 @@ window.BENCH = (() => {
     return [colX(+a), RAIL[k]];
   }
   function baseNet(h){
+    const BAT = { "x-bat-pos":"VCC", "x-bat-neg":"GND", "x-batb-pos":"BATB_P", "x-batb-neg":"VEE" };
+    if (BAT[h]) return BAT[h];
     if (h.startsWith("x-")) return h.toUpperCase();
     const [k, a, b] = h.split("-");
     if (k === "m") return ("abcde".includes(a) ? "T" : "B") + b;
-    if (k === "rtp") return "VCC";
-    if (k === "rbp") return L.dual ? "VEE" : "VCC";
-    return "GND";
+    return { rtp:"R_TP", rtn:"R_TN", rbn:"R_BN", rbp:"R_BP" }[k];
   }
   const POWER = ["VCC","GND","VEE"];
 
@@ -1449,15 +1453,42 @@ window.BENCH = (() => {
   const SESSION1_CORE = () => [CH("40106", "m-f-10"), W("m-a-10","rtp-10"), W("m-j-16","rbn-16"), C(1e-7,"rtp-4","rtn-4"),
     W("m-j-12","rbn-12"), W("m-j-14","rbn-14"), W("m-a-15","rtn-15"), W("m-a-13","rtn-13"), W("m-a-11","rtn-11"),
     R(1e4,"m-i-11","m-i-20"), P("m-h-20","m-h-10"), C(1e-8,"m-g-10","rbn-10")];
-  const SESSION1_OUT = () => [E(1e-5,"m-g-11","m-g-22"), R(1e5,"m-h-22","m-h-25"), W("m-i-25","x-amp-in"), W("x-amp-gnd","rbn-29")];
-  const MIX_OUT = () => [R(1e5,"m-g-11","m-g-22"), E(1e-5,"m-h-22","m-h-25"), W("m-i-25","x-amp-in"), W("x-amp-gnd","rbn-29")];
+  const POWER1 = () => [W("x-bat-pos","rtp-1"), W("x-bat-neg","rtn-1"), W("rtp-30","rbp-30"), W("rtn-30","rbn-30")];
+  const AMP_KIT = () => [W("x-amp-vcc","rtp-27"), W("x-amp-gnd","rtn-27"), W("x-amp-sp","x-spk-p"), W("x-amp-sm","x-spk-n")];
+  const SESSION1_OUT = () => [E(1e-5,"m-g-11","m-g-22"), R(1e5,"m-h-22","m-h-25"), W("m-i-25","x-amp-in"), ...AMP_KIT()];
+  const MIX_OUT = () => [R(1e5,"m-g-11","m-g-22"), E(1e-5,"m-h-22","m-h-25"), W("m-i-25","x-amp-in"), ...AMP_KIT()];
 
   /* ---- levels ---- */
   const ON = (text, why) => ({ title:"Battery on", tool:null, text, why, show:() => [], ok:s => s.flags.played });
+  const BAT1 = { title:"Connect the battery clip", tool:"wire",
+    text:"With <b>Wire</b>: the clip's <b>red lead</b> (glowing, on the battery) → the top red <b>+ rail</b> at column 1, and the <b>black lead</b> → the top blue <b>− rail</b> at column 1.",
+    why:"This is how the breadboard gets its power. In real life you wire the clip first and snap the battery on last, when everything is built, so nothing is live while you work.",
+    show:() => ["x-bat-pos","rtp-1","x-bat-neg","rtn-1"], ok:s => s.net("rtp-1") === "VCC" && s.net("rtn-1") === "GND" };
+  const RAILS1 = { title:"Join the top and bottom rails", tool:"wire",
+    text:"Two <b>wires</b> at the right end (column 30): top red <b>+ rail</b> → bottom red <b>+ rail</b>, and top blue <b>− rail</b> → bottom blue <b>− rail</b>.",
+    why:"On a real breadboard the top and bottom rails are not connected to each other. Hover over a rail hole: only its own line lights up. These two jumpers bring power to the bottom rails too.",
+    show:() => ["rtp-30","rbp-30","rtn-30","rbn-30"], ok:s => s.net("rbp-1") === "VCC" && s.net("rbn-1") === "GND" };
+  const BAT2 = { title:"Connect both batteries", tool:"wire",
+    text:"Four <b>wires</b>: battery A <b>red</b> → top red rail (col 1); battery A <b>black</b> → top blue rail; battery B <b>red</b> → bottom blue rail; battery B <b>black</b> → bottom red rail.",
+    why:"Two 9V batteries in a row (in series). Where A's − meets B's +, that's 0V. So the top red rail becomes +9V and the bottom red rail −9V: the dual supply op-amps like.",
+    show:() => ["x-bat-pos","rtp-1","x-bat-neg","rtn-1","x-batb-pos","rbn-1","x-batb-neg","rbp-1"],
+    ok:s => s.net("rtp-1") === "VCC" && s.net("rtn-1") === "GND" && s.net("rbp-1") === "VEE" && s.net("rbn-1") === s.net("x-batb-pos") };
+  const RAILS2 = { title:"Join the two 0V rails", tool:"wire",
+    text:"One <b>wire</b> at column 30: top blue <b>0V rail</b> → bottom blue <b>0V rail</b>.",
+    why:"This wire is the middle point between the two batteries. Without it, battery B isn't really connected and there is no −9V.",
+    show:() => ["rtn-30","rbn-30"], ok:s => s.net("rbn-1") === "GND" };
+  const AMP_POWER = dual => ({ title:"Power the amp", tool:"wire",
+    text:`Two <b>wires</b>: amp <b>VCC</b> → top red <b>${dual ? "+9V" : "+"} rail</b> (column 27), and amp <b>GND</b> → top blue <b>${dual ? "0V" : "−"} rail</b> (column 27).`,
+    why:"The LM386 module is a small circuit with its own chip, so it needs power too. Its GND also gives the signal a way back. Many modules have a tiny volume knob: turn it low before the first sound.",
+    show:() => ["x-amp-vcc","rtp-27","x-amp-gnd","rtn-27"], ok:s => s.net("x-amp-vcc") === "VCC" && s.net("x-amp-gnd") === "GND" });
+  const SPEAKER = { title:"Connect the speaker", tool:"wire",
+    text:"Two <b>wires</b>: amp <b>SPK+</b> → speaker <b>+</b>, and amp <b>SPK−</b> → speaker <b>−</b>.",
+    why:"The amp pushes the speaker cone back and forth, and that moving air is the sound you hear. On most modules the speaker's two wires go into small screw terminals.",
+    show:() => ["x-amp-sp","x-spk-p","x-amp-sm","x-spk-n"], ok:s => s.net("x-spk-p") === s.net("x-amp-sp") && s.net("x-spk-n") === s.net("x-amp-sm") };
   const LEVELS = [
    { n:0, title:"Session 0 · Light an LED", boxes:[],
      tools:[{t:"wire"},{t:"res",v:1e3},{t:"led"},{t:"ecap",v:4.7e-4}],
-     steps:[
+     steps:[ BAT1,
       { title:"Resistor from the + rail", tool:1,
         text:"The <b>1k resistor</b> button is already selected. Click the glowing hole in the red <b>+ rail</b> (column 3), then the glowing hole <b>a3</b> just below it.",
         why:"The resistor limits the current so the LED doesn't burn out. One leg now touches +9V; the other sits in column 3, and all five holes a3 to e3 are joined to it.",
@@ -1472,7 +1503,7 @@ window.BENCH = (() => {
         why:"This closes the loop back to the battery's −. Electricity only flows around a closed loop; without this wire nothing happens.",
         show:s => { const l = s.one("led"); const c = (l && s.colOf(s.net(l.pins[1]))) || 6; return [m("c", c), `rtn-${c}`]; },
         ok:s => { const l = s.one("led"); return !!(l && s.net(l.pins[1]) === "GND"); } },
-      { title:"Battery on", tool:null, text:"Press <b>Switch battery on</b> under the board.",
+      { title:"Battery on", tool:null, text:"Press <b>Snap the battery on</b> under the board.",
         why:"Current flows + → resistor → LED → −. How much? Ohm's law: (9V − 2V for the LED) ÷ 1000Ω = 7 mA. Safe for the LED.",
         show:() => [], ok:s => s.flags.played },
       { title:"Capacitor across the rails", tool:3,
@@ -1482,11 +1513,11 @@ window.BENCH = (() => {
       { title:"Battery off: watch the fade", tool:null, text:"Press the battery button again to switch it <b>off</b>, and watch the LED.",
         why:"The capacitor now empties through the resistor and LED, so the light fades over about half a second instead of snapping off (R × C = 1k × 470µF ≈ 0.47 s). This slow drain is how the oscillator in Session 1 keeps time.",
         show:() => [], ok:s => s.flags.faded }
-     ], powerAt:3 },
+     ], powerAt:4 },
 
-   { n:1, title:"Session 1 · First sound", boxes:["amp"],
+   { n:1, title:"Session 1 · First sound", boxes:["amp","spk"],
      tools:[{t:"chip",kind:"40106"},{t:"wire"},{t:"cap",v:1e-7},{t:"cap",v:1e-8},{t:"res",v:1e4},{t:"pot"},{t:"ecap",v:1e-5},{t:"res",v:1e5}],
-     steps:[
+     steps:[ BAT1, RAILS1,
       { title:"Seat the chip", tool:0,
         text:"The <b>40106 chip</b> button is selected. Click the glowing hole <b>f10</b> (row f, column 10). The chip drops in across the middle gap and covers columns 10 to 16.",
         why:"The gap keeps the two rows of legs apart; otherwise each leg would be joined to the one opposite it. Pin 1 sits bottom-left next to the notch. Pins 1–7 run left to right along the bottom, pins 8–14 run right to left along the top.",
@@ -1529,22 +1560,23 @@ window.BENCH = (() => {
         text:"The <b>100k resistor</b> is selected. Click the <b>capacitor's − column</b> (h22), then another empty column, <b>h25</b>.",
         why:"The chip swings a full 9V. The 100k turns that down to a level the amp input can take.",
         show:s => { const d = s.dcCap(); return [s.holeIn(d ? d.free : "B22", "h"), "m-h-25"]; }, ok:s => !!s.r100k() },
-      { title:"Connect the amp", tool:1,
-        text:"With <b>Wire</b>, make two wires: from the <b>100k's free column</b> (i25) to the amp's <b>IN</b> on the right, and from the amp's <b>GND</b> to the bottom blue <b>− rail</b>.",
-        why:"The amp needs the signal and a shared ground. Without the shared ground the signal has no way back, and you hear nothing.",
-        show:s => { const r = s.r100k(); return [s.holeIn(r ? r.free : "B25", "i"), "x-amp-in", "x-amp-gnd", "rbn-29"]; },
-        ok:s => { const r = s.r100k(); return !!(r && s.net("x-amp-in") === r.free && s.net("x-amp-gnd") === "GND"); } },
+      { title:"Signal into the amp", tool:1,
+        text:"<b>Wire</b>: from the <b>100k's free column</b> (i25) to the amp module's <b>IN</b> on the right.",
+        why:"The chip's signal is far too weak to move a speaker. The LM386 amp module makes a stronger copy of it.",
+        show:s => { const r = s.r100k(); return [s.holeIn(r ? r.free : "B25", "i"), "x-amp-in"]; },
+        ok:s => { const r = s.r100k(); return !!(r && s.net("x-amp-in") === r.free); } },
+      AMP_POWER(false), SPEAKER,
       { title:"Battery on, turn the pot", tool:null,
-        text:"Press <b>Switch battery on</b>, then drag the <b>Pitch pot</b> slider that appears.",
+        text:"Press <b>Snap the battery on</b>, then drag the <b>Pitch pot</b> slider that appears. The sound comes out of the speaker (here: your device\'s speakers).",
         why:"The chip now flips on and off hundreds of times a second: that's the tone. Turning the pot changes the resistance, which changes how fast the capacitor fills, which changes the pitch.",
         show:() => [], ok:s => s.flags.played }
      ],
      controls:[{ id:"p1", label:"Pitch pot", min:0, max:1000, val:300, fmt:v => Math.round(f40106(1e4 + v*1e3, 1e-8)) + " Hz" }],
      audio:"one" },
 
-   { n:2, title:"Session 2 · Drone box", boxes:["amp"],
+   { n:2, title:"Session 2 · Drone box", boxes:["amp","spk"],
      intro:"Your Session 1 oscillator is already on the board, with one change: the output now goes through a <b>100k</b> into a <b>mix column</b> (22) before the 10µF and the amp. You'll turn two of the unused oscillators into voices 2 and 3.",
-     pre:() => [...SESSION1_CORE(), ...MIX_OUT()],
+     pre:() => [...POWER1(), ...SESSION1_CORE(), ...MIX_OUT()],
      tools:[{t:"remove"},{t:"wire"},{t:"res",v:1e4},{t:"pot"},{t:"cap",v:1e-8},{t:"res",v:1e5}],
      steps:[
       { title:"Free up pin 3", tool:0,
@@ -1587,15 +1619,15 @@ window.BENCH = (() => {
         text:"<b>100k resistor</b>: click <b>g15</b> (pin 6's column), then <b>i22</b> (the mix column).",
         why:"Three voices now meet in column 22.",
         show:() => ["m-g-15","m-i-22"], ok:s => s.between("res", 1e5, s.pinNet(6), s.mix()) },
-      ON("Press <b>Switch battery on</b>. Three pitch sliders appear: set two of them almost the same and listen for the slow wobble.",
+      ON("Press <b>Snap the battery on</b>. Three pitch sliders appear: set two of them almost the same and listen for the slow wobble.",
          "Three oscillators, three pots, one mix point. When two voices are nearly the same pitch they drift in and out of step: that wobble is called beating.")
      ],
      controls:[1,2,3].map((k, i) => ({ id:"p"+k, label:`Voice ${k} pot`, min:0, max:1000, val:[300,310,180][i], fmt:v => Math.round(f40106(1e4 + v*1e3, 1e-8)) + " Hz" })),
      audio:"three" },
 
-   { n:3, title:"Session 3 · Modulation", boxes:["amp"],
+   { n:3, title:"Session 3 · Modulation", boxes:["amp","spk"],
      intro:"Your Session 1 circuit is already on the board. You'll turn pin 5–6 into a slow <b>LFO</b> that blinks an <b>LED</b>, then swap voice 1's pot for an <b>LDR</b> so the blinking light bends the pitch.",
-     pre:() => [...SESSION1_CORE(), ...SESSION1_OUT()],
+     pre:() => [...POWER1(), ...SESSION1_CORE(), ...SESSION1_OUT()],
      tools:[{t:"remove"},{t:"wire"},{t:"res",v:1e4},{t:"pot"},{t:"ecap",v:1e-5},{t:"res",v:1e3},{t:"led"},{t:"ldr"}],
      steps:[
       { title:"Free up pin 5", tool:0, text:"<b>Remove</b> is on. Click the <b>wire on pin 5</b> (from j14 to the − rail).",
@@ -1626,16 +1658,16 @@ window.BENCH = (() => {
       { title:"The LDR", tool:7, text:"<b>LDR</b>: click <b>h20</b>, then <b>h10</b>, where the pot was.",
         why:"An LDR is a resistor that changes with light. On your real board, bend the LED and LDR so they face each other and wrap them in black tape. Here they're linked for you.",
         show:() => ["m-h-20","m-h-10"], ok:s => s.loopOK(2, 1, "ldr") },
-      ON("Press <b>Switch battery on</b>. The LED blinks and the pitch jumps with it. Drag the <b>LFO rate</b> slider.",
+      ON("Press <b>Snap the battery on</b>. The LED blinks and the pitch jumps with it. Drag the <b>LFO rate</b> slider.",
          "LED on → the LDR sees light → its resistance drops → the capacitor fills faster → higher note. LED off → lower note. One circuit controlling another: that's modulation.")
      ],
      controls:[{ id:"lfo", label:"LFO rate pot", min:0, max:1000, val:250, fmt:v => f40106(1e4 + v*1e3, 1e-5).toFixed(1) + " blinks/s" }],
      audio:"lfo" },
 
-   { n:4, title:"Session 4 · Op-amp gain", boxes:["src","amp"], dual:true,
-     intro:"New chip: the <b>TL072</b> (two op-amps). It needs <b>two batteries</b>: the top red rail is <b>+9V</b>, the bottom red rail is <b>−9V</b>, and both blue rails are <b>0V</b>. The <b>Drone box</b> on the right is your Session 2 circuit, ready to plug in.",
+   { n:4, title:"Session 4 · Op-amp gain", boxes:["src","amp","spk"], dual:true,
+     intro:"New chip: the <b>TL072</b> (two op-amps). It needs <b>two batteries</b>, wired so the top red rail is <b>+9V</b>, the bottom red rail is <b>−9V</b>, and both blue rails are <b>0V</b>. The <b>Drone box</b> on the right is your Session 2 circuit (with its own battery), ready to plug in.",
      tools:[{t:"chip",kind:"tl072"},{t:"wire"},{t:"res",v:1e4},{t:"res",v:1e5}],
-     steps:[
+     steps:[ BAT2, RAILS2,
       { title:"Seat the TL072", tool:0, text:"<b>TL072 chip</b>: click <b>f10</b>. It covers columns 10 to 13.",
         why:"Pins 1–4 along the bottom (1 = output A, 2 = − input A, 3 = + input A, 4 = −9V). Pins 8–5 along the top (8 = +9V, 7 = output B, 6 = − input B, 5 = + input B).",
         show:() => ["m-f-10"], ok:s => !!s.chip("tl072") },
@@ -1655,22 +1687,23 @@ window.BENCH = (() => {
       { title:"Feedback resistor: 100k", tool:3, text:"<b>100k resistor</b>: from <b>h11</b> (pin 2) to <b>h10</b> (pin 1, the output).",
         why:"Feedback from output to − input. 100k ÷ 10k = a gain of 10: the output is 10 times bigger (and upside down).",
         show:() => ["m-h-11","m-h-10"], ok:s => s.between("res", 1e5, s.pinNet(2, "tl072"), s.pinNet(1, "tl072")) },
-      { title:"Output to the amp", tool:1, text:"Three <b>wires</b>: <b>g10</b> (pin 1) → amp <b>IN</b>; amp <b>GND</b> → bottom blue 0V rail; Drone box <b>GND</b> → bottom blue 0V rail.",
-        why:"Signal out, and every box sharing the same 0V.", show:() => ["m-g-10","x-amp-in","x-amp-gnd","rbn-26","x-src-gnd","rbn-28"],
-        ok:s => s.net("x-amp-in") === s.pinNet(1, "tl072") && s.net("x-amp-gnd") === "GND" && s.net("x-src-gnd") === "GND" },
+      { title:"Output to the amp", tool:1, text:"Two <b>wires</b>: <b>g10</b> (pin 1) → amp <b>IN</b>; Drone box <b>GND</b> → bottom blue 0V rail.",
+        why:"Signal out, and the drone box sharing the same 0V as everything else.", show:() => ["m-g-10","x-amp-in","x-src-gnd","rbn-28"],
+        ok:s => s.net("x-amp-in") === s.pinNet(1, "tl072") && s.net("x-src-gnd") === "GND" },
+      AMP_POWER(true), SPEAKER,
       { title:"Park the spare op-amp", tool:1, text:"Two <b>wires</b>: <b>a13</b> (pin 5) → top blue 0V rail, and <b>b12</b> (pin 6) → <b>b11</b> (pin 7).",
         why:"An unused op-amp left floating can oscillate and add noise. Tying + to 0V and output to − makes it sit quietly.",
         show:() => ["m-a-13","rtn-13","m-b-12","m-b-11"], ok:s => s.pinNet(5, "tl072") === "GND" && s.pinNet(6, "tl072") === s.pinNet(7, "tl072") },
-      ON("Press <b>Switch battery on</b>. Raise the <b>Input level</b> slider until the readout says clipping.",
+      ON("Press <b>Snap the battery on</b>. Raise the <b>Input level</b> slider until the readout says clipping.",
          "The output is the input × 10. Once that would be more than 9V, the op-amp can't go higher than its battery: the wave's tops flatten and the sound turns buzzy. That's clipping.")
      ],
      controls:[{ id:"in", label:"Input level (peak)", min:1, max:20, val:4, fmt:v => { const o = v/10*10; return `${(v/10).toFixed(1)} V in → ${o.toFixed(1)} V out${o > 9 ? " · clipping" : ""}`; } }],
      audio:"gain" },
 
-   { n:5, title:"Session 5 · Filter", boxes:["src","amp"], dual:true,
-     intro:"A low-pass filter from a <b>pot</b> and a <b>10nF</b> capacitor, then the TL072 as a <b>buffer</b> so the amp can't disturb it. Rails as in Session 4: top red +9V, bottom red −9V, blue 0V.",
+   { n:5, title:"Session 5 · Filter", boxes:["src","amp","spk"], dual:true,
+     intro:"A low-pass filter from a <b>pot</b> and a <b>10nF</b> capacitor, then the TL072 as a <b>buffer</b> so the amp can't disturb it. Two batteries again, as in Session 4: top red +9V, bottom red −9V, blue 0V.",
      tools:[{t:"chip",kind:"tl072"},{t:"wire"},{t:"pot"},{t:"cap",v:1e-8}],
-     steps:[
+     steps:[ BAT2, RAILS2,
       { title:"Seat the TL072", tool:0, text:"<b>TL072 chip</b>: click <b>f10</b>.", why:"Same chip as Session 4.", show:() => ["m-f-10"], ok:s => !!s.chip("tl072") },
       { title:"Power the chip", tool:1, text:"Two <b>wires</b>: <b>a10</b> (pin 8) → top red +9V rail; <b>j13</b> (pin 4) → bottom red −9V rail.",
         why:"+9V and −9V, as before.", show:s => { const c = s.c0("tl072"); return [m("a", c), `rtp-${c}`, m("j", c+3), `rbp-${c+3}`]; },
@@ -1688,21 +1721,22 @@ window.BENCH = (() => {
       { title:"Make it a buffer", tool:1, text:"<b>Wire</b>: from <b>g11</b> (pin 2, − input) to <b>g10</b> (pin 1, output).",
         why:"Output tied to − input: the output copies the + input exactly, but strongly. That's a buffer.",
         show:() => ["m-g-11","m-g-10"], ok:s => s.pinNet(2, "tl072") === s.pinNet(1, "tl072") },
-      { title:"Output to the amp", tool:1, text:"Three <b>wires</b>: <b>h10</b> (pin 1) → amp <b>IN</b>; amp <b>GND</b> → 0V rail; Drone box <b>GND</b> → 0V rail.",
-        why:"Signal out, shared ground.", show:() => ["m-h-10","x-amp-in","x-amp-gnd","rbn-26","x-src-gnd","rbn-28"],
-        ok:s => s.net("x-amp-in") === s.pinNet(1, "tl072") && s.net("x-amp-gnd") === "GND" && s.net("x-src-gnd") === "GND" },
+      { title:"Output to the amp", tool:1, text:"Two <b>wires</b>: <b>h10</b> (pin 1) → amp <b>IN</b>; Drone box <b>GND</b> → bottom blue 0V rail.",
+        why:"Signal out, shared ground.", show:() => ["m-h-10","x-amp-in","x-src-gnd","rbn-28"],
+        ok:s => s.net("x-amp-in") === s.pinNet(1, "tl072") && s.net("x-src-gnd") === "GND" },
+      AMP_POWER(true), SPEAKER,
       { title:"Park the spare op-amp", tool:1, text:"Two <b>wires</b>: <b>a13</b> (pin 5) → top blue 0V rail, and <b>b12</b> (pin 6) → <b>b11</b> (pin 7).",
         why:"Keeps the unused half quiet.", show:() => ["m-a-13","rtn-13","m-b-12","m-b-11"], ok:s => s.pinNet(5, "tl072") === "GND" && s.pinNet(6, "tl072") === s.pinNet(7, "tl072") },
-      ON("Press <b>Switch battery on</b>, then turn the <b>Cutoff pot</b> slider.",
+      ON("Press <b>Snap the battery on</b>, then turn the <b>Cutoff pot</b> slider.",
          "More resistance means a lower cutoff: fewer highs get through and the drone turns dark and muffled. Less resistance lets the brightness back in.")
      ],
      controls:[{ id:"cut", label:"Cutoff pot", min:0, max:1000, val:150, fmt:v => { const f = 1/(2*Math.PI*(1e3 + v*1e3)*1e-8); return (f >= 1000 ? (f/1000).toFixed(1) + " kHz" : Math.round(f) + " Hz") + " cutoff"; } }],
      audio:"filter" },
 
-   { n:6, title:"Session 6 · Envelope and VCA", boxes:["src","amp"],
+   { n:6, title:"Session 6 · Envelope and VCA", boxes:["src","amp","spk"],
      intro:"An <b>envelope</b> (button, diode, capacitor, decay pot) drives a <b>VCA</b>. This level uses the classic LED + LDR VCA, called a vactrol: the envelope lights an LED, and an LDR lets the drone through when it's lit. The transistor VCA in the Curriculum does the same job.",
      tools:[{t:"wire"},{t:"button"},{t:"diode"},{t:"ecap",v:1e-5},{t:"pot"},{t:"res",v:1e3},{t:"led"},{t:"ldr"}],
-     steps:[
+     steps:[ BAT1, RAILS1,
       { title:"The gate button", tool:1, text:"<b>Push button</b>: from the top red <b>+ rail</b> (column 5) to <b>a5</b>.",
         why:"Pressing it sends +9V into column 5: that's the gate signal.", show:() => ["rtp-5","m-a-5"], ok:s => !!s.btn() },
       { title:"The diode", tool:2, text:"<b>Diode</b>: click <b>b5</b> first (plain end), then <b>b8</b> (band end).",
@@ -1729,25 +1763,29 @@ window.BENCH = (() => {
       { title:"The LDR: the VCA", tool:7, text:"<b>LDR</b>: from <b>i20</b> to <b>i24</b>.",
         why:"Dark LDR = huge resistance = silence. Lit LDR = low resistance = sound passes. On your real board, bend it to face the LED and tape them together.",
         show:() => ["m-i-20","m-i-24"], ok:s => !!s.vcaLdr() },
-      { title:"Out to the amp", tool:0, text:"Three <b>wires</b>: <b>h24</b> → amp <b>IN</b>; amp <b>GND</b> → bottom blue rail; Drone box <b>GND</b> → bottom blue rail.",
-        why:"Signal out, shared ground.", show:s => { const l = s.vcaLdr(); return [s.holeIn(l ? l.free : "B24", "h"), "x-amp-in", "x-amp-gnd", "rbn-26", "x-src-gnd", "rbn-28"]; },
-        ok:s => { const l = s.vcaLdr(); return !!(l && s.net("x-amp-in") === l.free && s.net("x-amp-gnd") === "GND" && s.net("x-src-gnd") === "GND"); } },
-      ON("Press <b>Switch battery on</b>, then press and hold the <b>gate button</b> below the board. Let go and listen to the fade. Try the <b>Decay pot</b>.",
+      { title:"Out to the amp", tool:0, text:"Two <b>wires</b>: <b>h24</b> → amp <b>IN</b>; Drone box <b>GND</b> → bottom blue rail.",
+        why:"Signal out, shared ground.", show:s => { const l = s.vcaLdr(); return [s.holeIn(l ? l.free : "B24", "h"), "x-amp-in", "x-src-gnd", "rbn-28"]; },
+        ok:s => { const l = s.vcaLdr(); return !!(l && s.net("x-amp-in") === l.free && s.net("x-src-gnd") === "GND"); } },
+      AMP_POWER(false), SPEAKER,
+      ON("Press <b>Snap the battery on</b>, then press and hold the <b>gate button</b> below the board. Let go and listen to the fade. Try the <b>Decay pot</b>.",
          "Button → capacitor fills → LED bright → LDR lets the drone through. Let go → capacitor drains through the pot → LED fades → sound fades. That shape over time is the envelope.")
      ],
      controls:[{ id:"dec", label:"Decay pot", min:0, max:1000, val:80, fmt:v => { const t = (1e4 + v*1e3)*1e-5; return (t < 1 ? Math.round(t*1000) + " ms" : t.toFixed(1) + " s") + " fade"; } }],
      gate:true, audio:"vca" },
 
-   { n:7, title:"Session 7 · Sequencer", boxes:["voice"],
+   { n:7, title:"Session 7 · Sequencer", boxes:["voice","amp","spk"],
      intro:"Two chips: a <b>40106</b> as the clock and a <b>CD4017</b> counter. Four steps, each with its own pitch pot, send a voltage to the <b>Voice</b> box on the right (your oscillator with an envelope). This is the biggest build; take it one card at a time.",
-     tools:[{t:"chip",kind:"40106"},{t:"chip",kind:"4017"},{t:"wire"},{t:"res",v:1e4},{t:"pot"},{t:"ecap",v:1e-5},{t:"diode"}],
-     steps:[
+     tools:[{t:"chip",kind:"40106"},{t:"chip",kind:"4017"},{t:"wire"},{t:"res",v:1e4},{t:"pot"},{t:"ecap",v:1e-5},{t:"diode"},{t:"cap",v:1e-7},{t:"res",v:1e5}],
+     steps:[ BAT1, RAILS1,
       { title:"Seat the 40106 (clock)", tool:0, text:"<b>40106 chip</b>: click <b>f4</b>. It covers columns 4 to 10.", why:"One of its oscillators will be the clock.", show:() => ["m-f-4"], ok:s => !!s.chip("40106") },
       { title:"Seat the 4017 (counter)", tool:1, text:"<b>CD4017 chip</b>: click <b>f14</b>. It covers columns 14 to 21.",
         why:"The counter: each clock pulse moves it one step. Pins along the bottom 1–8, along the top 16–9 from left to right.", show:() => ["m-f-14"], ok:s => !!s.chip("4017") },
       { title:"Power both chips", tool:2, text:"Four <b>wires</b>: <b>a4</b> (40106 pin 14) → + rail; <b>j10</b> (40106 pin 7) → − rail; <b>a14</b> (4017 pin 16) → + rail; <b>j21</b> (4017 pin 8) → − rail.",
         why:"Both chips need + and −.", show:s => { const a = s.c0("40106"), b = s.c0("4017"); return [m("a", a), `rtp-${a}`, m("j", a+6), `rbn-${a+6}`, m("a", b), `rtp-${b}`, m("j", b+7), `rbn-${b+7}`]; },
         ok:s => s.pinNet(14) === "VCC" && s.pinNet(7) === "GND" && s.pinNet(16, "4017") === "VCC" && s.pinNet(8, "4017") === "GND" },
+      { title:"Clean power: 100nF", tool:7, text:"<b>100nF capacitor</b>: from the top red <b>+ rail</b> at column 12 to the top blue <b>− rail</b> right under it.",
+        why:"Two chips switching on and off put little spikes on the power. This small capacitor between + and − smooths them out, as in Session 1.",
+        show:() => ["rtp-12","rtn-12"], ok:s => s.between("cap", 1e-7, "VCC", "GND") },
       { title:"Ground the 40106's unused inputs", tool:2, text:"Five <b>wires</b> to the − rails: pins 3 and 5 (<b>j6</b>, <b>j8</b>, bottom rail), pins 9, 11 and 13 (<b>a9</b>, <b>a7</b>, <b>a5</b>, top rail).",
         why:"Same as Session 1: only one oscillator is used, the rest are kept quiet.",
         show:s => { const c = s.c0("40106"); return [m("j", c+2),`rbn-${c+2}`,m("j", c+4),`rbn-${c+4}`,m("a", c+5),`rtn-${c+5}`,m("a", c+3),`rtn-${c+3}`,m("a", c+1),`rtn-${c+1}`]; },
@@ -1766,17 +1804,27 @@ window.BENCH = (() => {
       { title:"Loop of 4: the reset wire", tool:2, text:"<b>Wire</b>: from <b>b15</b> (pin 15, reset) to <b>b20</b> (pin 10, step 5).",
         why:"When the counter reaches step 5, it resets straight back to step 1. So it loops through 4 steps.", show:s => { const c = s.c0("4017"); return [m("b", c+1), m("b", c+6)]; }, ok:s => s.pinNet(15, "4017") === s.pinNet(10, "4017") },
       { title:"Four step pots", tool:4, text:"Four <b>pots</b>, one per step output: <b>i16</b> (step 1) → <b>i24</b>, <b>i15</b> (step 2) → <b>i25</b>, <b>i17</b> (step 3) → <b>i26</b>, <b>i20</b> (step 4) → <b>i27</b>.",
-        why:"When a step is active, its output goes to +9V and its pot sets how much voltage that step sends on: the step's pitch. (A real pot's third leg goes to ground; here that's done for you.)",
+        why:"When a step is active, its output goes to +9V and flows through its pot. Each pot's resistance, together with the pull-down resistor you'll add soon, decides how much voltage that step sends on: the step's pitch.",
         show:s => { const c = s.c0("4017"); return [m("i", c+2),"m-i-24",m("i", c+1),"m-i-25",m("i", c+3),"m-i-26",m("i", c+6),"m-i-27"]; }, ok:s => s.stepPots().length === 4 },
-      { title:"Four diodes to one line", tool:6, text:"Four <b>diodes</b>, plain end first: <b>h24</b> → <b>f29</b>, <b>h25</b> → <b>g29</b>, <b>h26</b> → <b>h29</b>, <b>h27</b> → <b>i29</b>.",
-        why:"All four steps share one output line (column 29). The diodes stop the steps from feeding back into each other.",
-        show:s => { const d = s.stepPots(); const cols = d.length === 4 ? d.map(x => s.colOf(x)) : [24,25,26,27]; return cols.flatMap((c, i) => [s.holeIn(`B${c}`, "h"), m("fghi"[i], 29)]); }, ok:s => !!s.cvLine() },
-      { title:"Pitch line to the Voice", tool:2, text:"<b>Wire</b>: from <b>j29</b> to the Voice box <b>CV</b>.", why:"CV = control voltage: this line sets the voice's pitch.",
-        show:s => { const n = s.cvLine(); return [s.holeIn(n || "B29", "j"), "x-voice-cv"]; }, ok:s => { const n = s.cvLine(); return !!(n && s.net("x-voice-cv") === n); } },
+      { title:"Four diodes to one line", tool:6, text:"Four <b>diodes</b>, plain end first, across the gap into column 29's top half: <b>h24</b> → <b>a29</b>, <b>h25</b> → <b>b29</b>, <b>h26</b> → <b>c29</b>, <b>h27</b> → <b>d29</b>.",
+        why:"All four steps now share one output line (column 29). The diodes are one-way doors, so an active step can't leak back into the others.",
+        show:s => { const d = s.stepPots(); const cols = d.length === 4 ? d.map(x => s.colOf(x)) : [24,25,26,27]; return cols.flatMap((c, i) => [s.holeIn(`B${c}`, "h"), m("abcd"[i], 29)]); }, ok:s => !!s.cvLine() },
+      { title:"Extend the pitch line", tool:2, text:"<b>Wire</b>: from <b>e29</b> to <b>j29</b>, jumping the middle gap.",
+        why:"Column 29's top half is full (four diodes and this wire). The jumper carries the pitch line into the bottom half, where there's room for the next two parts. You'll do this a lot on real breadboards.",
+        show:() => ["m-e-29","m-j-29"], ok:s => { const n = s.cvLine(); return !!(n && s.net("m-j-29") === n); } },
+      { title:"Pull-down resistor: 100k", tool:8, text:"<b>100k resistor</b>: from <b>f29</b> to the bottom blue <b>− rail</b>.",
+        why:"Without it the pitch line would float when no diode is pushing. With it, each step's pot and this resistor form a voltage divider: a bigger pot resistance gives a lower voltage, so a lower note.",
+        show:() => ["m-f-29","rbn-29"], ok:s => { const n = s.cvLine(); return !!(n && s.between("res", 1e5, n, "GND")); } },
+      { title:"Pitch line to the Voice", tool:2, text:"<b>Wire</b>: from <b>g29</b> to the Voice box <b>CV</b>.", why:"CV = control voltage: this line sets the voice's pitch.",
+        show:() => ["m-g-29","x-voice-cv"], ok:s => { const n = s.cvLine(); return !!(n && s.net("x-voice-cv") === n); } },
       { title:"Clock to the Voice", tool:2, text:"Two <b>wires</b>: <b>j5</b> (clock) → Voice <b>GATE</b>; Voice <b>GND</b> → bottom − rail.",
         why:"Each clock pulse also triggers the voice's envelope, so every step plays as a note.", show:s => [m("j", s.c0("40106") + 1), "x-voice-gate", "x-voice-gnd", "rbn-28"],
         ok:s => s.net("x-voice-gate") === s.pinNet(2) && s.net("x-voice-gnd") === "GND" },
-      ON("Press <b>Switch battery on</b>. Four notes loop. Change the <b>Clock</b> and <b>Step</b> sliders.",
+      { title:"Voice into the amp", tool:2, text:"<b>Wire</b>: from the Voice box <b>OUT</b> to the amp's <b>IN</b>.",
+        why:"The voice makes the notes; the amp makes them loud enough for the speaker.",
+        show:() => ["x-voice-out","x-amp-in"], ok:s => s.net("x-amp-in") === s.net("x-voice-out") },
+      AMP_POWER(false), SPEAKER,
+      ON("Press <b>Snap the battery on</b>. Four notes loop. Change the <b>Clock</b> and <b>Step</b> sliders.",
          "Clock pulse → counter moves → a different output goes high → a different pot sets the voltage → a different pitch. That's a sequencer.")
      ],
      controls:[{ id:"clk", label:"Clock pot", min:0, max:1000, val:200, fmt:v => (Math.min(12, f40106(1e4 + v*1e3, 1e-5))*60).toFixed(0) + " steps/min" }]
@@ -1871,7 +1919,7 @@ window.BENCH = (() => {
     const targets = new Set(hintsOn ? currentShow() : []);
     const hole = h => { const [x, y] = holeXY(h); return `<circle class="bb-hole${used.has(h) ? " used" : ""}${targets.has(h) ? " target" : ""}${pending === h ? " pend" : ""}" data-hole="${h}" data-net="${baseNet(h)}" cx="${x}" cy="${y}" r="5"><title>${holeTitle(h)}</title></circle>`; };
     const top = L.dual ? "+9V" : "+", botRed = L.dual ? "−9V" : "+", blue = L.dual ? "0V" : "−";
-    let g = `<svg viewBox="0 0 800 410" role="img" aria-label="Breadboard"${removeMode ? ' class="remove-mode"' : ""}>`;
+    let g = `<svg viewBox="0 0 800 ${boardH}" role="img" aria-label="Breadboard"${removeMode ? ' class="remove-mode"' : ""}>`;
     g += `<rect x="58" y="28" width="650" height="370" rx="10" class="bb-body"/>`;
     g += `<line x1="66" x2="700" y1="35" y2="35" stroke="#c0392b" stroke-width="2"/><line x1="66" x2="700" y1="71" y2="71" stroke="#2d6cb5" stroke-width="2"/>`;
     g += `<line x1="66" x2="700" y1="353" y2="353" stroke="#2d6cb5" stroke-width="2"/><line x1="66" x2="700" y1="389" y2="389" stroke="#c0392b" stroke-width="2"/>`;
@@ -1881,10 +1929,14 @@ window.BENCH = (() => {
     for (let c = 1; c <= COLS; c++) if (c === 1 || c % 5 === 0) g += `<text x="${colX(c)}" y="92" class="bb-label" text-anchor="middle">${c}</text>`;
     const bat = (y, label) => `<rect x="8" y="${y}" width="40" height="80" rx="6" fill="#2b2f33"/><rect x="18" y="${y - 7}" width="20" height="8" rx="2" fill="#555"/><text x="28" y="${y + 36}" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="11" fill="#f0f0f0">${label}</text><text x="28" y="${y + 52}" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="${battery ? "#7ddc8a" : "#aaa"}">${battery ? "ON" : "OFF"}</text>`;
     const live = c => `stroke="${battery ? c : "#8a8f94"}" stroke-width="3" fill="none" ${battery ? "" : 'stroke-dasharray="4 4"'}`;
-    if (!L.dual) g += `<g>${bat(150, "9V")}<path d="M22 150V${RAIL.rtp}H${colX(1) - 8}" ${live("#d9534f")}/><path d="M34 150V${RAIL.rtn}H${colX(1) - 8}" fill="none" stroke="#222" stroke-width="3"/></g>`;
-    else g += `<g>${bat(96, "+9V")}${bat(250, "−9V")}<path d="M22 96V${RAIL.rtp}H${colX(1) - 8}" ${live("#d9534f")}/><path d="M34 96V${RAIL.rtn}H${colX(1) - 8}" fill="none" stroke="#222" stroke-width="3"/><path d="M22 330V${RAIL.rbp}H${colX(1) - 8}" ${live("#d9534f")}/><path d="M34 330V${RAIL.rbn}H${colX(1) - 8}" fill="none" stroke="#222" stroke-width="3"/></g>`;
+    const lead = (x0, y0, [x1, y1], c) => `<path d="M${x0} ${y0}C${x0} ${y0 - 12} ${x1} ${y1 + 12} ${x1} ${y1}" fill="none" stroke="${c}" stroke-width="3"/>`;
+    const clip = (y, pos, neg) => `<rect x="14" y="${y - 10}" width="28" height="8" rx="2" fill="#1d1d1d"/>${lead(20, y - 10, boxPos[pos], "#d9534f")}${lead(36, y - 10, boxPos[neg], "#222")}`;
+    if (!L.dual) g += `<g>${bat(150, "9V")}${clip(150, "x-bat-pos", "x-bat-neg")}<text x="28" y="108" text-anchor="middle" class="bb-label">clip</text></g>`;
+    else g += `<g>${bat(96, "A")}${clip(96, "x-bat-pos", "x-bat-neg")}${bat(250, "B")}${clip(250, "x-batb-pos", "x-batb-neg")}</g>`;
     (L.boxes || []).forEach(b => { const B = BOXES[b]; g += `<g><rect x="716" y="${B.y}" width="80" height="${B.h}" rx="6" fill="${B.color}"/><text x="756" y="${B.y + 16}" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="#f1efe8">${B.label}</text>`;
-      B.terms.forEach(([k, lab]) => { const [x, y] = boxPos[`x-${b}-${k}`]; g += `<text x="${x + 12}" y="${y + 3}" font-family="JetBrains Mono, monospace" font-size="9" fill="#f1efe8">${lab}</text>`; }); g += `</g>`; });
+      B.terms.forEach(([k, lab]) => { const [x, y] = boxPos[`x-${b}-${k}`]; g += `<text x="${x + 12}" y="${y + 3}" font-family="JetBrains Mono, monospace" font-size="9" fill="#f1efe8">${lab}</text>`; });
+      if (B.speaker) { const cy = B.y + B.h/2 + 6; g += `<circle cx="780" cy="${cy}" r="12" fill="#2b2a31" stroke="#8d8a96"/><circle cx="780" cy="${cy}" r="7" fill="#57545f"/><circle cx="780" cy="${cy}" r="2.5" fill="#8d8a96"/>`; }
+      g += `</g>`; });
     for (let c = 1; c <= COLS; c++) { for (const k of ["rtp","rtn","rbn","rbp"]) g += hole(`${k}-${c}`); for (const r of "abcdefghij") g += hole(m(r, c)); }
     Object.keys(boxPos).forEach(h => g += hole(h));
     parts.filter(p => p.t === "chip").forEach(p => g += partSVG(p));
@@ -1893,7 +1945,9 @@ window.BENCH = (() => {
     $("wb-board").innerHTML = g;
   }
   function holeTitle(h){
-    if (h.startsWith("x-")) { const [, b, k] = h.split("-"); return `${BOXES[b].label} ${k.toUpperCase()}`; }
+    const BATT = { "x-bat-pos":`${L.dual ? "Battery A" : "Battery"} clip, red lead (+)`, "x-bat-neg":`${L.dual ? "Battery A" : "Battery"} clip, black lead (−)`, "x-batb-pos":"Battery B clip, red lead (+)", "x-batb-neg":"Battery B clip, black lead (−)" };
+    if (BATT[h]) return BATT[h];
+    if (h.startsWith("x-")) { const [, b, k] = h.split("-"); const t = BOXES[b].terms.find(x => x[0] === k); return `${BOXES[b].label} ${t ? t[1] : k.toUpperCase()}`; }
     const [k, a, b] = h.split("-"); if (k === "m") return `Row ${a}, column ${b}`;
     const lab = { rtp:L.dual ? "+9V rail" : "+ rail", rtn:L.dual ? "0V rail" : "− rail", rbn:L.dual ? "0V rail" : "− rail", rbp:L.dual ? "−9V rail" : "+ rail" }[k];
     return `${lab}, column ${a}`;
@@ -1912,7 +1966,7 @@ window.BENCH = (() => {
     $("wb-steps").innerHTML = L.steps.map((st, i) => `<li class="${st.ok(s) ? "done" : ""}${i === now ? " now" : ""}"><span>${st.title}</span></li>`).join("");
     if (now !== lastNow) {
       lastNow = now;
-      if (now >= 0) { const tI = L.steps[now].tool; if (tI !== null && tI !== undefined) { const t = L.tools[tI]; if (t.t === "remove") { removeMode = true; tool = null; } else { removeMode = false; tool = t; } pending = null; drawBoard(); renderTools(); } }
+      if (now >= 0) { const tI = L.steps[now].tool; if (tI !== null && tI !== undefined) { const t = typeof tI === "string" ? L.tools.find(x => x.t === tI) : L.tools[tI]; if (t.t === "remove") { removeMode = true; tool = null; } else { removeMode = false; tool = t; } pending = null; drawBoard(); renderTools(); } }
     }
     const intro = L.intro ? `<p class="why">${L.intro}</p>` : "";
     if (now < 0) $("wb-now").innerHTML = `<div class="eyebrow">All ${n} steps done</div><h3>You built it.</h3><p>Every connection is right. Your real breadboard can look exactly like this one. Try the next level, or press Start over to practise again.</p>`;
@@ -1922,7 +1976,7 @@ window.BENCH = (() => {
     return now;
   }
   function renderPower(){
-    let h = `<button type="button" class="btn big${battery ? " active" : ""}" id="wb-bat">${battery ? "Battery on · switch off" : "Switch battery on"}</button>`;
+    let h = `<button type="button" class="btn big${battery ? " active" : ""}" id="wb-bat">${battery ? "Battery on · unsnap it" : "Snap the battery on"}</button>`;
     if (flags.on && L.gate) h += `<button type="button" class="btn big" id="wb-gate">Hold the gate button</button>`;
     if (flags.on && L.controls) h += L.controls.map(c => `<div class="ctrl" style="min-width:200px;flex:1"><label for="wb-${c.id}"><span>${c.label}</span><output id="wb-${c.id}-o">${c.fmt(ctl[c.id])}</output></label><input type="range" id="wb-${c.id}" data-ctl="${c.id}" min="${c.min}" max="${c.max}" step="1" value="${ctl[c.id]}"></div>`).join("");
     $("wb-power-row").innerHTML = h;
@@ -1992,7 +2046,7 @@ window.BENCH = (() => {
   function glowTick(){
     raf = 0; if (L.n !== 0 || !visible) return;
     const s = S(); let b = 0;
-    if (L.steps.slice(0, 3).every(st => st.ok(s))) { if (battery) b = 1; else if (s.capAcross()) b = Math.max(0, Math.exp(-(performance.now() - offAt)/1000/(1e3*4.7e-4))*1.15 - 0.15); }
+    if (L.steps.slice(0, 4).every(st => st.ok(s))) { if (battery) b = 1; else if (s.capAcross()) b = Math.max(0, Math.exp(-(performance.now() - offAt)/1000/(1e3*4.7e-4))*1.15 - 0.15); }
     setGlow(b);
     if (!battery && b > 0) raf = requestAnimationFrame(glowTick);
   }
