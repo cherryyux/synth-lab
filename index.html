@@ -230,6 +230,14 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .joint.good{border-color:var(--good);color:var(--good)} .joint.bad{border-color:var(--warn);color:var(--warn)}
 .bb-hole.target{fill:var(--accent);stroke:var(--accent);stroke-width:3;animation:pulse 1.2s ease-in-out infinite}
 @keyframes pulse{50%{stroke-width:7;stroke-opacity:.35}}
+.part-box{border-top:1px solid color-mix(in srgb,var(--accent) 35%,transparent);padding-top:8px}
+.part-box summary{font-family:var(--f-ui);font-size:12.5px;letter-spacing:.04em;color:var(--accent);cursor:pointer}
+.part-box p{font-size:15px;margin-top:6px}
+.level-info ul.part-list{margin:6px 0;padding-left:20px;display:flex;flex-direction:column;gap:3px}
+.sim-inside{border:1px solid var(--grid);border-radius:10px;padding:10px 14px;background:var(--bg)}
+.sim-inside summary{font-family:var(--f-display);font-weight:700;font-size:16px;cursor:pointer}
+.sim-inside ol{margin:8px 0;padding-left:22px;display:flex;flex-direction:column;gap:4px}
+.sim-inside table{font-size:14.5px}
 .now-card{border:2px solid var(--accent);background:var(--accent-soft);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
 .now-card p{max-width:none}
 .now-card .why{color:var(--muted);font-size:15.5px}
@@ -390,6 +398,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
       <p class="status-line">How a breadboard is wired inside: each numbered column has two groups of five holes (a–e and f–j), and each group is one metal strip. The long red and blue lines at the top and bottom are the + and − rails. Hover or tap any hole to see what's joined to it.</p>
     </details>
     <div id="wb-board-level" class="stack">
+      <div id="wb-level-info"></div>
       <div class="now-card" id="wb-now" role="status" aria-live="polite"></div>
       <div class="tools" id="wb-tools"></div>
       <div class="wb-grid">
@@ -1204,6 +1213,28 @@ window.SIM = (() => {
     return () => { alive = false; clearInterval(t); };
   }
 
+  const SIM_INFO = {
+    s0:{ inside:["While the battery is connected, current flows through the 1k resistor and the LED, and the 470µF capacitor fills up to 9V.","When you disconnect the battery, the capacitor becomes the battery for a moment: it pushes its stored charge out through the resistor and LED.","As it empties, its voltage drops, so less current flows and the LED gets dimmer. The drop is fast at first, then slower: that's the curve on the graph.","How long it lasts depends on R × C: 1k × 470µF ≈ 0.47 seconds. Double either one and it lasts twice as long."],
+      knobs:[["Resistor","The resistor that limits the LED's current","Bigger = dimmer light and a slower fade"],["Capacitor","The electrolytic capacitor across the battery","Bigger = more stored charge = a longer fade"],["Disconnect battery","Pulling the battery clip off","Starts the fade"]] },
+    s1:{ inside:["The 40106's inverter flips its output: high when its input is low, low when its input is high.","Its output feeds back to its input through the 10k and the pot, and a capacitor sits on the input.","Output high → the capacitor slowly fills → when it's full enough the input counts as high → the output flips low.","Output low → the capacitor empties → when it's empty enough → the output flips high again. Forever.","Each flip is one edge of a square wave. How fast the capacitor fills (resistance × capacitance) sets how many flips per second: the pitch."],
+      knobs:[["Pitch pot","The B1M pot in the feedback loop (plus the fixed 10k)","More resistance = slower filling = lower note"],["Timing capacitor","The capacitor from pin 1 to −","Bigger = slower = lower. At 10µF it's so slow you hear separate clicks"]] },
+    s2:{ inside:["The same chip has six oscillators; here six are running, each with its own pot.","Each output passes through its own 100k resistor to one shared point: the mix.","The resistors make each voice add a share to the mix without forcing the others.","Two voices at almost the same pitch drift in and out of step: when their waves line up the sound gets louder, when they're opposite it gets thinner. That slow pulsing is called beating."],
+      knobs:[["Timing capacitor","The capacitor on every voice's input","Moves all voices up or down together"],["Voice 1–6 pots","One B1M pot per oscillator","Each sets one voice's pitch"]] },
+    s3:{ inside:["One oscillator gets a huge 10µF capacitor, so it flips only a few times per second: an LFO (low-frequency oscillator). You don't hear it; you use it.","The LFO's output lights an LED, on and off.","The LED shines on an LDR, which sits where voice 1's pitch pot was.","Light on the LDR → low resistance → the voice's capacitor fills faster → higher note. Dark → lower note.","So the LFO moves the pitch by itself, and your hand (the light slider) moves it too. That's modulation: one signal controlling another."],
+      knobs:[["LFO rate pot","The pot in the slow oscillator's loop","Faster or slower wobble"],["Modulation depth","How strongly the LED's light reaches the LDR","More = bigger jumps in pitch"],["Light on the LDR","Your hand or a lamp over the sensor","More light = higher base note"],["Through LED + LDR","Using the light link instead of a direct wire","Smooth sweeps instead of hard jumps, because the LED and LDR react a little slowly"]] },
+    s4:{ inside:["The op-amp compares its + input (held at 0V) with its − input, and pushes its output to make them equal.","The signal comes in through a 10k resistor; a feedback resistor goes from the output back to the − input.","To keep − at 0V, the output has to push the opposite way, (feedback ÷ 10k) times harder than the input. That's the gain.","But the output can't go beyond the batteries: about ±9V. Ask for more and the wave's tops are cut flat. That's clipping: the sound turns buzzy and distorted."],
+      knobs:[["Feedback resistor","The resistor from output to − input","Bigger = more gain = louder, until it clips"],["Input signal","How big the incoming wave is","Bigger input clips sooner"]] },
+    s5:{ inside:["A low-pass filter is a resistor followed by a capacitor to 0V.","Low frequencies pass the capacitor by; high frequencies leak through it to ground and disappear.","The cutoff is where that starts: 1 ÷ (2π × R × C). Below it, nearly everything passes; above it, less and less.","Resonance feeds some of the output back, boosting the frequencies right at the cutoff, so it whistles or sings.","A square wave is full of high harmonics, so as the cutoff drops it goes from buzzy to round and dark."],
+      knobs:[["Cutoff pot","The R in the filter","More resistance = lower cutoff = darker sound"],["Resonance","Feedback around the op-amp filter","More = a ringing peak at the cutoff"],["LFO sweeps the cutoff","The LFO from Session 3 turning the cutoff for you","The classic slow 'wow' of a synth"]] },
+    s6:{ inside:["Pressing the button (the gate) sends +9V through a diode into a 10µF capacitor: it fills in a few thousandths of a second.","Let go, and the diode stops it leaking back, so the capacitor drains slowly through the decay pot.","That voltage, rising fast and falling slowly, is the envelope.","The VCA is a volume control driven by voltage. It follows the envelope, so the sound jumps up when you press and fades as the capacitor drains.","With a slow oscillator pressing for you, the notes repeat by themselves."],
+      knobs:[["Pitch pot","The oscillator's pitch pot","Which note plays"],["Decay pot","The resistor the capacitor drains through","More resistance = slower drain = longer note"],["Clock rate pot","The pot in the slow oscillator that presses the button","How often notes repeat"],["Hold to play","The push button","Your finger is the gate"]] },
+    s7:{ inside:["A slow 40106 oscillator is the clock: steady pulses.","Each pulse moves the 4017 counter one step. Only one of its outputs is high (+9V) at a time.","Each output feeds its own pot. The active step's pot and a pull-down resistor form a voltage divider, so each step sends a different voltage on the pitch line.","That voltage sets the oscillator's pitch, and the same clock pulse plucks the envelope, so each step plays a note.","When the counter reaches the step wired to its reset pin, it jumps back to the start: that sets the loop length."],
+      knobs:[["Clock rate pot","The pot in the clock oscillator","The tempo"],["Decay pot","The envelope's decay resistor","How long each note rings"],["Step sliders","The four to eight step pots","Each step's note"],["Reset pin wired to","Where the reset wire is plugged in","How many steps loop"]] }
+  };
+  const simInfo = id => { const I = SIM_INFO[id]; if (!I) return "";
+    return `<details class="sim-inside" open><summary>What's happening inside</summary><ol>${I.inside.map(x => `<li>${x}</li>`).join("")}</ol>
+      <p><b>Each control is a real part:</b></p><div class="tbl"><table><thead><tr><th>Control</th><th>In real life</th><th>Turning it…</th></tr></thead><tbody>${I.knobs.map(([a,b,c]) => `<tr><td>${a}</td><td>${b}</td><td>${c}</td></tr>`).join("")}</tbody></table></div></details>`; };
+
   const MODS = [
    { id:"s0", n:0, t:"LED fade", audio:false,
      blurb:"Pull the battery and the capacitor keeps the LED glowing for a moment. The bigger R × C, the slower the fade. No sound in this one.",     tries:["Press <b>Disconnect battery</b>. The LED fades out over less than a second, and the line on the graph slides down in a curve.","Press it again to reconnect, change the capacitor to <b>1000µF</b>, and disconnect again: the fade lasts about twice as long.","Choose <b>none</b> and disconnect: the LED snaps off at once. No bucket, no fade."],
@@ -1344,6 +1375,7 @@ window.SIM = (() => {
       <article class="sim-card" id="sim-${m.id}">
         <div class="sim-head"><span class="num">Session ${m.n}</span><h3>${m.t}</h3>${m.audio ? `<button class="power" type="button" id="pw-${m.id}" data-power="${m.id}" aria-pressed="false">Power</button>` : ""}</div>
         <p>${m.blurb}</p>
+        ${simInfo(m.id)}
         <div class="try"><div class="eyebrow">Try this</div><ol>${m.tries.map(t => `<li>${t}</li>`).join("")}</ol></div>
         ${m.html()}
         <canvas class="scope" id="sc-${m.id}" aria-label="${m.audio ? "Oscilloscope" : "LED brightness plot"}"></canvas>
@@ -1457,6 +1489,85 @@ window.BENCH = (() => {
   const AMP_KIT = () => [W("x-amp-vcc","rtp-27"), W("x-amp-gnd","rtn-27"), W("x-amp-sp","x-spk-p"), W("x-amp-sm","x-spk-n")];
   const SESSION1_OUT = () => [E(1e-5,"m-g-11","m-g-22"), R(1e5,"m-h-22","m-h-25"), W("m-i-25","x-amp-in"), ...AMP_KIT()];
   const MIX_OUT = () => [R(1e5,"m-g-11","m-g-22"), E(1e-5,"m-h-22","m-h-25"), W("m-i-25","x-amp-in"), ...AMP_KIT()];
+
+  /* ---- explanations: parts, levels ---- */
+  const PART_INFO = {
+    battery:{ name:"9V battery and clip", what:"A battery stores energy and pushes it out with a fixed pressure: 9 volts between its + and − terminals. The clip snaps onto the top; its <b>red</b> lead is + and its <b>black</b> lead is −.", inside:"Chemicals inside make electrons pile up at the − terminal. When you connect a closed loop from + back to −, they flow through your circuit and do work on the way.", spot:"Rectangular block with two snaps on top. The smaller round snap is +.", way:"Red lead to the + rail, black to the − rail. Swapped, chips can be damaged, so always check before snapping on.", tip:"Unsnap the battery whenever you change parts." },
+    battery2:{ name:"Two 9V batteries in series", what:"Two batteries stacked in a row. Where the − of battery A meets the + of battery B is the middle point: you call it 0V. Measured from there, A's + is +9V and B's − is −9V.", inside:"Voltage is always measured between two points. Pick the middle as your reference and you get a positive and a negative supply: what op-amps need to make waves that swing above and below zero.", spot:"Two clips, two batteries. Label them A and B with tape so you don't mix them up.", way:"A red → +9V rail, A black → 0V rail, B red → 0V rail, B black → −9V rail.", tip:"The two blue 0V rails must be joined, or battery B isn't connected to anything." },
+    rails:{ name:"Breadboard rails", what:"The long lines of holes along the top and bottom edges. Each line is one metal strip inside, so every hole on it is connected. You use them to bring + and − to every part of the board.", inside:"Under the plastic are springy metal clips. A leg pushed into a hole is gripped by the clip, and everything on the same clip is joined.", spot:"Marked with a red line (+) and a blue line (−). Most boards have a pair at the top and a pair at the bottom.", way:"No direction, but keep the habit: red rail for +, blue rail for −.", tip:"On many boards the top and bottom rails aren't connected, and long boards are even split in the middle. Check with the multimeter's beep mode." },
+    wire:{ name:"Jumper wire", what:"A road for electricity with almost no resistance. Two holes joined by a wire become the same point in the circuit.", inside:"Solid copper inside plastic insulation. The bare ends push into the breadboard holes.", spot:"Short, stiff, colored wires. Solid-core works best in breadboards; stranded wire frays.", way:"No direction.", tip:"Use colors with meaning: red for +, black or blue for −, other colors for signals. It makes mistakes much easier to find." },
+    res:{ name:"Resistor", what:"Slows down the flow of current. Its value, in ohms (Ω), says how much. A bigger number means less current gets through.", inside:"A thin film of carbon or metal that electricity has a hard time passing through. The energy it blocks becomes a tiny bit of heat.", spot:"Small beige or blue tube with colored bands. Brown-black-red = 1k, brown-black-orange = 10k, brown-black-yellow = 100k.", way:"No direction. Either way round works.", tip:"In synths, resistors do four jobs: protect LEDs, set timing with a capacitor, mix signals, and turn a signal down." },
+    led:{ name:"LED (light-emitting diode)", what:"Gives light when current flows through it, but only in one direction: from the long leg (+) to the short leg (−).", inside:"A tiny piece of special crystal. When current crosses it, the electrons release energy as light. It uses about 2V of the battery's push.", spot:"Colored dome on two legs. Long leg = +. The rim is flat on the − side.", way:"Long leg towards +. Backwards, it simply stays dark.", tip:"Never connect an LED without a resistor: it would take too much current and burn out in a flash." },
+    cap:{ name:"Ceramic capacitor", what:"A tiny bucket that stores a little electric charge. It fills up and empties through whatever it's connected to. Its size is in nanofarads (nF).", inside:"Two metal plates with a thin insulating layer between them. Charge collects on the plates but can't jump across.", spot:"Small orange or blue disc with a 3-digit code: 103 = 10nF, 104 = 100nF.", way:"No direction.", tip:"In synths: with a resistor it sets timing (pitch), across the power rails it smooths noise (100nF), and in a filter it swallows high frequencies." },
+    ecap:{ name:"Electrolytic capacitor", what:"A big bucket of charge, measured in microfarads (µF), a thousand times bigger than nF. It fills and empties slowly, which makes it perfect for slow things.", inside:"A rolled-up strip of metal foil with a liquid electrolyte. That chemistry gives lots of storage in a small can, but only works one way round.", spot:"Small can (often blue or black) with a light stripe down one side and the value printed on it, like 10µF 25V.", way:"Stripe and short leg go to the lower voltage (−). Backwards it can bulge or pop.", tip:"In synths: slow timing (LFO, clock), blocking DC so only the sound gets through, and holding the envelope's charge." },
+    pot:{ name:"Potentiometer (pot)", what:"A resistor with a knob. Turning it changes the resistance, so it's how you play the circuit by hand.", inside:"A curved resistive track with a sliding contact (the wiper) that moves when you turn the shaft. The middle leg is the wiper.", spot:"Round body with a shaft and three legs. B1M = 1MΩ, B = linear (smooth, even change).", way:"Here you use the wiper and one outer leg as a variable resistor. Swap the outer leg and the knob works backwards.", tip:"The middle leg is always the wiper." },
+    ldr:{ name:"LDR (light-dependent resistor)", what:"A resistor that changes with light. In the dark it's around 1MΩ; in bright light it drops to a few kΩ. Your hand or a lamp becomes a knob.", inside:"A squiggle of a material that lets more current through when light hits it.", spot:"Small disc with a red-brown zigzag on top, two legs.", way:"No direction.", tip:"Paired with an LED and taped together so outside light can't get in, it becomes a vactrol: one circuit controlling another with light." },
+    diode:{ name:"Diode (1N4148)", what:"A one-way door for current. It lets current through from the plain end to the end with the band, and blocks it the other way.", inside:"A junction of two kinds of silicon. Pushed one way, the junction opens (using about 0.6V); pushed the other way, it stays closed.", spot:"Tiny glass tube with a black band at one end.", way:"Current flows towards the band. Backwards, nothing gets through.", tip:"In synths: charging an envelope without it leaking back, and joining several outputs without them feeding into each other." },
+    button:{ name:"Push button", what:"Connects its two legs only while you press it. Let go, and the connection opens again.", inside:"A small metal dome or spring that touches two contacts when pressed.", spot:"Small square button, usually with four legs (pairs of legs are already joined inside).", way:"No direction.", tip:"In synths a button press is a gate: an on/off signal that starts something, like an envelope." },
+    "40106":{ name:"CD40106 chip", what:"Six inverters in one chip. An inverter turns high into low and low into high. Feed its output back to its input through a resistor, add a capacitor, and it flips by itself: an oscillator.", inside:"It's a Schmitt trigger: it switches up at one voltage and back down at a lower one. That gap keeps it swinging cleanly instead of getting stuck halfway.", spot:"Black 14-leg chip printed CD40106 or HEF40106. The notch or dot marks the pin 1 end.", way:"Notch to the left here. Pin 14 = +, pin 7 = −. Backwards, it can get hot.", tip:"Always ground unused inputs (3, 5, 9, 11, 13 when you use one oscillator), or they pick up noise." },
+    tl072:{ name:"TL072 op-amp chip", what:"Two op-amps in one chip. An op-amp compares its two inputs and pushes its output until they're equal. Resistors around it decide what it does: boost, mix, buffer or filter.", inside:"Dozens of transistors make a very sensitive comparing machine. On its own it would swing wildly; feedback (a path from the output back to the − input) tames it.", spot:"Black 8-leg chip printed TL072.", way:"Notch to the left. Pin 8 = +9V, pin 4 = −9V. It needs both.", tip:"Gain of an inverting amplifier = feedback resistor ÷ input resistor." },
+    "4017":{ name:"CD4017 counter chip", what:"A counter with ten outputs. Only one output is high (+9V) at a time, and each clock pulse moves it to the next one: step 1, 2, 3 and so on.", inside:"A chain of flip-flops (tiny memory cells) that pass the 'on' state along on every rising clock edge.", spot:"Black 16-leg chip printed CD4017.", way:"Notch to the left. Pin 16 = +, pin 8 = −, pin 14 = clock in, pin 13 = enable (to −), pin 15 = reset.", tip:"Wire the reset pin to an output and the count jumps back to step 1 when it gets there: that sets the loop length." },
+    amp:{ name:"LM386 amplifier module", what:"A small board that makes a stronger copy of a weak signal, strong enough to move a speaker.", inside:"The LM386 chip, a few capacitors and usually a volume knob. Small signal in, the same shape but with much more current out.", spot:"Small board marked LM386, with pins labeled VCC, GND, IN and two speaker terminals.", way:"VCC to +, GND to −, signal into IN, speaker on the SPK terminals.", tip:"Start with its volume knob low: a raw square wave is loud and harsh." },
+    spk:{ name:"8Ω speaker", what:"Turns electric signals into moving air: sound.", inside:"A coil of wire glued to a paper cone sits next to a magnet. Current through the coil makes it a magnet too, so it's pushed and pulled, and the cone moves the air.", spot:"Round with a paper or plastic cone, two wires or tabs. 8Ω is its resistance.", way:"Two wires. Swapping + and − still plays.", tip:"Never connect a speaker straight to the chip output; always through the amp." },
+    src:{ name:"Drone box (your Session 2 circuit)", what:"Stands for the drone circuit you built earlier, with its own battery. It sends its sound out of OUT.", inside:"Three 40106 oscillators mixed together.", spot:"On your desk: the breadboard or box from Session 2.", way:"OUT carries the sound, GND must be joined to this board's 0V.", tip:"Any two circuits that pass a signal must share ground, or the signal has no way back." },
+    voice:{ name:"Voice (oscillator + envelope)", what:"Stands for a voice built from earlier sessions: an oscillator whose pitch follows the CV input, and an envelope triggered by GATE.", inside:"CV sets the pitch, GATE plucks the envelope, OUT sends the note.", spot:"On your desk: your Session 3 and Session 6 circuits joined together.", way:"CV and GATE in, OUT to the amp, GND to this board's −.", tip:"CV = control voltage, a voltage that controls something instead of being heard." }
+  };
+  const PART_BY_TITLE = {
+    "Connect the battery clip":"battery", "Connect both batteries":"battery2", "Join the top and bottom rails":"rails", "Join the two 0V rails":"rails",
+    "Power the amp":"amp", "Connect the speaker":"spk", "Signal into the amp":"amp", "Voice into the amp":"voice", "Bring the drone in":"src",
+    "Pitch line to the Voice":"voice", "Clock to the Voice":"voice", "Output to the amp":"amp", "Out to the amp":"amp",
+    "Power: pin 14 to +":"40106", "Ground: pin 7 to −":"40106", "Ground the 5 unused inputs":"40106", "Ground the 40106's unused inputs":"40106",
+    "Pin 8 to +9V":"tl072", "Pin 4 to −9V":"tl072", "+ input to 0V":"tl072", "Make it a buffer":"tl072", "Park the spare op-amp":"tl072", "Power the chip":"tl072", "Filter into the buffer":"tl072",
+    "Clock into the counter":"4017", "Enable the counter":"4017", "Loop of 4: the reset wire":"4017", "Power both chips":"4017",
+    "Free up pin 3":"40106", "Free up pin 5":"40106", "LED to −":"led", "Wire back to −":"wire", "Extend the pitch line":"wire",
+    "Take out voice 1's pot":"ldr", "Battery off: watch the fade":"ecap"
+  };
+  const partOf = st => {
+    if (PART_BY_TITLE[st.title]) return PART_BY_TITLE[st.title];
+    if (st.tool === null || st.tool === undefined) return /battery/i.test(st.title) ? "battery" : null;
+    const t = typeof st.tool === "string" ? L.tools.find(x => x.t === st.tool) : L.tools[st.tool];
+    if (!t || t.t === "remove") return null;
+    return t.t === "chip" ? t.kind : t.t;
+  };
+  const partBox = st => { const k = partOf(st), P = PART_INFO[k]; if (!P) return "";
+    return `<details class="part-box" open><summary>About this part: ${P.name}</summary>
+      <p><b>What it does.</b> ${P.what}</p><p><b>How it works inside.</b> ${P.inside}</p>
+      <p><b>How to spot it.</b> ${P.spot}</p><p><b>Which way round.</b> ${P.way}</p><p class="why"><b>Tip.</b> ${P.tip}</p></details>`; };
+
+  const LEVEL_INFO = {
+    0:{ goal:"Light an LED, dim it, then watch a capacitor keep it glowing after the battery is gone.",
+      flow:["The battery pushes current out of its + terminal.","The 1k resistor limits how much can flow.","The LED lights up as current passes from its long leg to its short leg.","The wire brings the current back to the battery's −, closing the loop.","The 470µF capacitor fills up while the battery is on, and empties through the LED when it's off."],
+      parts:[["battery","Powers the circuit"],["res","Keeps the LED's current safe (about 7 mA)"],["led","Shows you current is flowing"],["ecap","470µF bucket that makes the light fade"]] },
+    1:{ goal:"Build one oscillator with the 40106 chip and hear it through an amp and speaker.",
+      flow:["The battery powers the 40106 (pins 14 and 7) and the amp.","Inside the chip, one inverter's output (pin 2) feeds back to its input (pin 1) through the 10k and the pot.","The 10nF capacitor on pin 1 fills and empties through that path. Each time it's full or empty, the chip flips: that's a square wave.","The 10µF capacitor lets the wave through but blocks the steady voltage under it.","The 100k turns the 9V wave down to a level the amp can take.","The LM386 module boosts it and drives the speaker."],
+      parts:[["40106","Makes the tone"],["pot","Pitch knob: more resistance, slower filling, lower note"],["res","10k: limits the highest pitch. 100k: turns the signal down"],["cap","10nF: timing. 100nF: clean power"],["ecap","10µF: DC blocker"],["amp","Makes the signal strong"],["spk","Turns it into sound"]] },
+    2:{ goal:"Turn two unused oscillators into voices 2 and 3 and mix all three into one drone.",
+      flow:["Voice 1 from Session 1 is already built.","Each new voice is the same loop: output → 10k → pot → input, plus a 10nF capacitor to −.","Each voice's output goes through its own 100k into one mix column.","The resistors let the voices add up without fighting each other.","The mix goes through the 10µF and into the amp and speaker."],
+      parts:[["40106","Now running three of its six oscillators"],["pot","One pitch knob per voice"],["cap","10nF timing capacitor per voice"],["res","10k feedback and 100k mixing resistor per voice"]] },
+    3:{ goal:"Make a slow oscillator (LFO) blink an LED, and let that light bend the pitch through an LDR.",
+      flow:["A third oscillator gets a 10µF capacitor, 1000 times bigger than voice 1's, so it flips a few times per second.","Its output lights an LED through a 1k resistor: on, off, on, off.","Voice 1's pot is replaced by an LDR facing that LED.","LED on → LDR resistance drops → voice 1's capacitor fills faster → higher note. LED off → lower note.","One circuit controls another, through light: that's modulation."],
+      parts:[["ecap","10µF: makes the LFO slow"],["led","Blinks at the LFO's speed"],["ldr","Turns light into resistance, so the pitch follows the LED"],["pot","Sets the LFO's speed"]] },
+    4:{ goal:"Use an op-amp to make the drone 10 times bigger, and hear what happens when it hits the battery limit.",
+      flow:["Two batteries give +9V, 0V and −9V.","The drone enters through a 10k input resistor into the op-amp's − input.","A 100k feedback resistor goes from the output back to the − input. The + input sits at 0V.","The op-amp pushes its output until − matches + (0V). The result: output = input × (100k ÷ 10k) = 10 times bigger, and upside down.","If that would be more than 9V, the output can't follow: the wave's tops flatten. That's clipping, a kind of distortion."],
+      parts:[["tl072","Two op-amps: one boosts, one is parked"],["res","10k in, 100k feedback: their ratio is the gain"],["battery2","Makes the ±9V supply"],["src","The sound to boost"]] },
+    5:{ goal:"Build a low-pass filter that darkens the drone, with an op-amp buffer after it.",
+      flow:["The drone goes through a pot (the R) and a 10nF capacitor to 0V (the C).","High frequencies leak through the capacitor to ground; low ones carry on. That's a low-pass filter.","Turning the pot moves the cutoff point: cutoff = 1 ÷ (2π × R × C).","An op-amp wired as a buffer copies the filtered signal without draining it, so the amp can't disturb the filter."],
+      parts:[["pot","The R: sets the cutoff"],["cap","The C: swallows high frequencies"],["tl072","Buffer: a strong copy of the filtered signal"],["src","The bright drone to darken"]] },
+    6:{ goal:"Make the endless drone into separate notes with an envelope and a VCA.",
+      flow:["Pressing the button sends +9V through a diode into a 10µF capacitor: it fills almost instantly.","Let go, and the capacitor slowly drains through the decay pot. Its voltage rises fast and falls slowly: that's the envelope.","That voltage lights an LED through a 1k resistor: bright on press, fading after.","An LDR facing the LED sits in the drone's path. Dark = huge resistance = silence. Lit = sound passes. That's the VCA.","So the drone's volume follows the envelope's shape."],
+      parts:[["button","The gate: starts each note"],["diode","Lets the capacitor charge but not leak back"],["ecap","Holds the envelope"],["pot","Decay: how long each note rings"],["led","Brightness follows the envelope"],["ldr","Volume control driven by light"]] },
+    7:{ goal:"Build a 4-step sequencer: a clock, a counter, a knob per step, and a voice that plays the notes.",
+      flow:["A slow 40106 oscillator (10µF) is the clock: steady pulses.","Each pulse moves the 4017 counter one step. One output at a time goes to +9V.","Each step output goes through its own pot and diode to one shared pitch line.","A 100k pull-down on that line forms a voltage divider with whichever pot is active: each step makes a different voltage.","That voltage (CV) sets the voice's pitch, the clock (GATE) plucks its envelope, and the voice goes to the amp and speaker.","The reset wire on step 5 sends the counter back to step 1, so it loops through 4 steps."],
+      parts:[["40106","The clock"],["4017","Counts the steps"],["pot","One pitch knob per step"],["diode","Keeps steps from feeding into each other"],["res","10k clock feedback, 100k pull-down"],["voice","Turns CV and GATE into notes"]] }
+  };
+  const levelInfoHTML = lv => { const I = LEVEL_INFO[lv.n]; if (!I) return "";
+    return `<details class="howto level-info" open><summary>What you're building</summary>
+      <p><b>Goal.</b> ${I.goal}</p>
+      <p><b>How it works, in order:</b></p><ol>${I.flow.map(f => `<li>${f}</li>`).join("")}</ol>
+      <p><b>The parts and their jobs:</b></p><ul class="part-list">${I.parts.map(([k, r]) => `<li><b>${PART_INFO[k].name}</b>: ${r}</li>`).join("")}</ul>
+      <p class="status-line">Each step below also explains its part in detail. Click any part on the board to see what it is.</p></details>`; };
+  const partClickInfo = p => { const k = p.t === "chip" ? p.kind : p.t, P = PART_INFO[k]; if (!P) return "";
+    const v = fmtV(p.t, p.v); return `<b>${v ? v + " " : ""}${P.name}.</b> ${P.what} <span class="why">(To take it out, press Remove and click it.)</span>`; };
 
   /* ---- levels ---- */
   const ON = (text, why) => ({ title:"Battery on", tool:null, text, why, show:() => [], ok:s => s.flags.played });
@@ -1969,9 +2080,9 @@ window.BENCH = (() => {
       if (now >= 0) { const tI = L.steps[now].tool; if (tI !== null && tI !== undefined) { const t = typeof tI === "string" ? L.tools.find(x => x.t === tI) : L.tools[tI]; if (t.t === "remove") { removeMode = true; tool = null; } else { removeMode = false; tool = t; } pending = null; drawBoard(); renderTools(); } }
     }
     const intro = L.intro ? `<p class="why">${L.intro}</p>` : "";
-    if (now < 0) $("wb-now").innerHTML = `<div class="eyebrow">All ${n} steps done</div><h3>You built it.</h3><p>Every connection is right. Your real breadboard can look exactly like this one. Try the next level, or press Start over to practise again.</p>`;
+    if (now < 0) $("wb-now").innerHTML = `<div class="eyebrow">All ${n} steps done</div><h3>You built it.</h3><p>Every connection is right. Your real breadboard can look exactly like this one. Try the next level, or press Start over to practise again.</p>${LEVEL_INFO[L.n] ? `<p><b>How your circuit works:</b></p><ol>${LEVEL_INFO[L.n].flow.map(f => `<li>${f}</li>`).join("")}</ol>` : ""}`;
     else { const st = L.steps[now];
-      $("wb-now").innerHTML = `${now === 0 ? intro : ""}<div class="eyebrow">Step ${now + 1} of ${n}</div><h3>${st.title}</h3><p><b>Do this:</b> ${st.text}</p><p class="why"><b>Why:</b> ${st.why}</p>
+      $("wb-now").innerHTML = `${now === 0 ? intro : ""}<div class="eyebrow">Step ${now + 1} of ${n}</div><h3>${st.title}</h3><p><b>Do this:</b> ${st.text}</p><p class="why"><b>Why:</b> ${st.why}</p>${partBox(st)}
         <div class="row">${(st.show(s) || []).length ? `<button type="button" class="tool" id="wb-hints" aria-pressed="${hintsOn}">${hintsOn ? "Hide the glowing holes" : "Show me where"}</button>` : ""}<span class="status-line">Any holes work as long as the connections are the same; the glowing ones are a suggestion.</span></div>`; }
     return now;
   }
@@ -2172,6 +2283,7 @@ window.BENCH = (() => {
     (L.controls || []).forEach(c => ctl[c.id] = c.val);
     if (L.pre) { let w = 0; parts = L.pre().map(p => ({ ...p, id:idSeq++, color:p.t === "wire" ? WIRE_COLORS[w++ % WIRE_COLORS.length] : undefined })); }
     renderLevels();
+    $("wb-level-info").innerHTML = L.solder ? "" : levelInfoHTML(L);
     $("wb-board-level").hidden = !!L.solder; $("wb-solder-level").hidden = !L.solder;
     try { localStorage.setItem("synthlab-level", String(n)); } catch(e){}
     if (L.solder) { solderInit(); return; }
@@ -2190,7 +2302,7 @@ window.BENCH = (() => {
     const part = e.target.closest("[data-part]"), h = e.target.closest("[data-hole]");
     if (removeMode && part) return remove(part.dataset.part);
     if (h) return place(h.dataset.hole);
-    if (part) msg("To take a part out, press <b>Remove</b> and click it.");
+    if (part) { const p = parts.find(x => x.id === +part.dataset.part); msg(p ? partClickInfo(p) || "To take a part out, press <b>Remove</b> and click it." : "To take a part out, press <b>Remove</b> and click it."); }
   });
   $("wb-board").addEventListener("mouseover", e => { const h = e.target.closest("[data-hole]"); if (!h) return; document.querySelectorAll(".bb-hole.hl").forEach(x => x.classList.remove("hl")); document.querySelectorAll(`[data-net="${h.dataset.net}"]`).forEach(x => x.classList.add("hl")); });
   $("wb-board").addEventListener("mouseleave", () => document.querySelectorAll(".bb-hole.hl").forEach(x => x.classList.remove("hl")));
