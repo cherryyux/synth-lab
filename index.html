@@ -42,9 +42,17 @@ header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background
 .bar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding-block:12px}
 .brand{font-family:var(--f-display);font-weight:700;font-size:22px;letter-spacing:-.01em;display:flex;align-items:center;gap:10px}
 .brand svg{width:28px;height:28px}
-.bar{position:relative;padding-right:52px}
-.bar{padding-right:150px}
-.acct-btn{position:absolute;top:14px;right:56px;height:30px;max-width:88px;padding:0 12px;border-radius:99px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-family:var(--f-ui);font-size:12.5px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar{position:relative}
+.bar nav.tabs{flex-basis:100%;margin-left:0}
+.bar .brand{min-height:34px;padding-right:130px}
+.lang-btn{position:absolute;top:14px;right:54px;height:30px;display:flex;border:1px solid var(--line);border-radius:99px;background:var(--panel);overflow:hidden;font-family:var(--f-ui);font-size:11.5px;font-weight:600;letter-spacing:.04em}
+.lang-btn a{display:grid;place-items:center;width:30px;color:var(--muted);text-decoration:none}
+.lang-btn a:hover{color:var(--ink)}
+.lang-btn a[aria-current="true"]{background:var(--accent);color:var(--bg)}
+.lang-btn a:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.bar .brand{padding-right:226px}
+@media (max-width:520px){.acct-btn{max-width:88px}.bar .brand{padding-right:210px;font-size:19px}}
+.acct-btn{position:absolute;top:14px;right:126px;height:30px;max-width:104px;padding:0 12px;border-radius:99px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-family:var(--f-ui);font-size:12.5px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .acct-btn:hover{border-color:var(--accent)}
 .acct-btn[hidden]{display:none}
 .auth{border-bottom:1px solid var(--line);background:var(--panel)}
@@ -269,6 +277,20 @@ input[type=range]{width:100%;accent-color:var(--accent)}
       <button role="tab" id="t-book" data-tab="book">Book</button>
       <button role="tab" id="t-notes" data-tab="notes">Notes</button>
     </nav>
+    <nav class="lang-btn" id="lang-btn" data-here="en" aria-label="Language / Dil"><a href="tr.html" data-lang="tr" lang="tr" hreflang="tr" title="Türkçe">TR</a><a href="./" data-lang="en" lang="en" hreflang="en" title="English" aria-current="true">EN</a></nav>
+    <script>
+    (() => {
+      const here = document.getElementById("lang-btn").dataset.here;
+      let saved = null; try { saved = localStorage.getItem("synthlab-lang"); } catch(e){}
+      if (saved && saved !== here) { location.replace(saved === "tr" ? "tr.html" + location.hash : "./" + location.hash); return; }
+      document.getElementById("lang-btn").addEventListener("click", e => {
+        const a = e.target.closest("[data-lang]"); if (!a) return;
+        if (a.dataset.lang === here) { e.preventDefault(); return; }
+        try { localStorage.setItem("synthlab-lang", a.dataset.lang); } catch(err){}
+        e.preventDefault(); location.href = a.getAttribute("href") + location.hash;
+      });
+    })();
+    </script>
     <button type="button" class="acct-btn" id="acct-btn" hidden>Sign in</button>
     <button type="button" class="theme-btn" id="theme-btn" aria-label="Switch to light mode" title="Switch to light mode">
       <svg viewBox="0 0 24 24" aria-hidden="true">
